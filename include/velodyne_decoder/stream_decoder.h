@@ -26,6 +26,7 @@ protected:
   ScanDecoder scan_decoder_;
   int packets_per_scan_;
   std::vector<VelodynePacket> scan_packets_;
+  int previous_packet_azimuth_ = 0;
 };
 
 } // namespace velodyne_decoder

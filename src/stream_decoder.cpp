@@ -27,7 +27,12 @@ int StreamDecoder::calc_packets_per_scan(const std::string &model, double rpm) {
     // 3 firing cycles in a data packet. 3 x 53.3 μs = 0.1599 ms is the
     // accumulation delay per packet.
     // 1 packet/0.1599 ms = 6253.9 packets/second
-    packet_rate = 6253.9;
+    // packet_rate = 6253.9;
+
+    // Newer firmware calculations
+    // 3 * 58.5688 us = 169.7064 us per packet = 5892.53 packets / second
+    packet_rate = 5892.53;
+
   } else if (model == "HDL-64E_S2" || model == "HDL-64E_S2.1") {
     // generates 1333312 points per second
     // 1 packet holds 384 points
@@ -55,23 +60,39 @@ int StreamDecoder::calc_packets_per_scan(const std::string &model, double rpm) {
   return static_cast<int>(ceil(packet_rate / frequency));
 }
 
+// Re-written to use azimuth based clouds instead of packet
 std::optional<std::pair<Time, PointCloud>> //
 StreamDecoder::decode(Time stamp, const RawPacketData &packet) {
   if (config_.gps_time) {
     stamp = getPacketTimestamp(&(packet[1200]), stamp);
   }
+
+  auto *raw = reinterpret_cast<const raw_packet_t *>(&packet[0]);
+
+  int last_block_azimuth = raw->blocks[11].rotation - 18000;
+  while (last_block_azimuth < 0) {
+    last_block_azimuth += 36000;
+  }
+  while (last_block_azimuth >= 36000) {
+    last_block_azimuth -= 36000;
+  }
+
   scan_packets_.emplace_back(stamp, packet);
-  if (scan_packets_.size() == packets_per_scan_) {
+
+  if (last_block_azimuth < previous_packet_azimuth_) {
     Time scan_stamp;
-    if (config_.timestamp_first_packet) {
-      scan_stamp = scan_packets_.front().stamp;
-    } else {
-      scan_stamp = scan_packets_.back().stamp;
-    }
+    scan_stamp = scan_packets.back().stamp;
     PointCloud scan = scan_decoder_.decode(scan_stamp, scan_packets_);
+
     scan_packets_.clear();
+    // Add this packet back in as it contains the beginning of the spin
+    scan_packets_.emplace_back(stamp, packet);
+    previous_packet_azimuth_ = last_block_azimuth;
+
     return std::make_pair(scan_stamp, scan);
   }
+
+  previous_packet_azimuth_ = last_block_azimuth;
   return std::nullopt;
 }
 
