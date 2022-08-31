@@ -81,7 +81,7 @@ StreamDecoder::decode(Time stamp, const RawPacketData &packet) {
 
   if (last_block_azimuth < previous_packet_azimuth_) {
     Time scan_stamp;
-    scan_stamp = scan_packets.back().stamp;
+    scan_stamp = scan_packets_.back().stamp;
     PointCloud scan = scan_decoder_.decode(scan_stamp, scan_packets_);
 
     scan_packets_.clear();
